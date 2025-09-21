@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import OperationalError
 from typing_extensions import TypedDict
 import matplotlib.pyplot as plt
+import seaborn
 
 load_dotenv()
 
@@ -89,7 +90,8 @@ def graph_code_gen(GraphGenState):
     No english text or 'Here's your code'. Just plain python. Remember your output will be executed as it is, so generate responsibly.
     Import all the necessary modules you are using - very important.
     IMPORTANT, make sure to save the figure in a variable named fig. Make sure to add plt.close(fig) at the end.
-    No english text or 'Here's your code'. Just plain python. Not even stuff like "three backticks python."
+    No english text or 'Here's your code'. Just plain python. Not even stuff like "three backticks python." DONT USE SEABORN- ONLY MATPLOTLIB.
+    Dont use datetime- never.
     """)]
     messages.append(HumanMessage(f"Here is the query: {GraphGenState['query']}. Here is the table: {str(GraphGenState['table'])}"))
     result = llm.invoke(messages)
@@ -188,6 +190,86 @@ builder_k.add_node("KPI Generator", kpi_gen)
 builder_k.add_edge(START, "KPI Generator")
 builder_k.add_edge("KPI Generator", END)
 g_k = builder_k.compile()
+
+# Dashboard Agent
+class DashboardGenState(TypedDict):
+    schema: str
+    relevant_graph_names: list
+    relevant_graphs: list
+    html_code: tuple
+    conn_str:str
+
+def relevant_graph_name_gen(DashboardGenState):
+    messages = [SystemMessage("""
+    You are an advisor agent that advises what all graphs are relevant for a given database. You are given a SQL schema for a database with multiple tables that may or may not have relationships between them.
+    Your goal is to generate ideas about graphs that may be relevant to show on a database dashboard. These ideas must be in english form. They will be later passed to an SQL query generator so double check what you propose can even exist or not.
+    Be creative with your ideas, use different types of charts like line, bar, histogram, pie, boxplot, heatmaps. Whatever is relevant. Only generate 5 graphs.
+    Output format: You have to output a python list of strings. Your output will be executed as it is in a python evaluator so make sure to return only a python list.
+    """)]
+    messages.append(HumanMessage(f"Here is the schema: {str(DashboardGenState['schema'])}"))
+    result = llm.invoke(messages)
+    DashboardGenState["relevant_graph_names"] = eval(result.content)
+    return DashboardGenState
+def relevant_graph_gen(DashboardGenState):
+    graphs = []
+    for graph_name in DashboardGenState["relevant_graph_names"]:
+        try:
+            graphs.append(g.invoke({
+                "query": graph_name,
+                "conn_str": DashboardGenState['conn_str'],
+                "schema": str(DashboardGenState['schema'])
+            }))
+        except OperationalError as e:
+            print("Schema mismatch error.")
+    DashboardGenState["relevant_graphs"] = graphs
+    return DashboardGenState
+
+def dashboard_html_gen(DashboardGenState):
+    messages = [SystemMessage("""
+    You are an HTML coding agent. Your job is to design a clean, modern, and visually appealing dashboard layout in HTML. You are given the schema of the database and the names of the graphs that will be shown on the dashboard.
+    Constraints & Requirements:
+    Outputs: You must return a tuple of exactly two Python string literals. If you use inverted commas, make sure to escape them properly.
+    - The first is the HTML page template, containing the full dashboard layout with inline CSS/JS, and a placeholder {cards} where multiple cards will be inserted.
+    - The second is the graph card template, which defines the structure of a single card with placeholders {data}, {caption}, and {analysis}.
+    Output format: 
+    Both outputs must be returned as plain Python triple-quoted strings (\"\"\" ... \"\"\"). Do not use f-strings. Do not include explanations or comments outside of the strings.
+
+    Embedding data:
+    - {data} → base64 string for the graph image (used as <img src="data:image/png;base64,{data}">).
+    - {caption} → short caption for the graph.
+    - {analysis} → descriptive analysis text.
+    - {cards} → concatenated string of card HTML blocks, inserted inside the page template.
+    These placeholders will later be replaced by calling .format(...) in Python.
+
+    Styling:
+    - Include all CSS and JS inline in the page template. No external file references.
+    - Layout should be responsive and professional, using card-like containers for each graph with image, caption, and analysis.
+
+    Use a consistent theme: light background, rounded corners, padding, soft shadow.
+
+    Scalability: The {cards} placeholder in the page template must support rendering any number of card blocks generated from the card template.
+
+    Final Output:
+    Only return a tuple of two Python triple-quoted strings: first the page template, second the card template. Nothing else.
+    YOUR CODE WILL BE EXECUTED, SO PROPERLY ESCAPE EVERY SPECIAL CHARACTER, BRACES, INVERTED COMMAS.
+    """)]
+    graph_names = str(DashboardGenState["relevant_graph_names"])
+    messages.append(HumanMessage(f"Here is the schema {DashboardGenState['schema']}. Here is the list of graph names: {graph_names}"))
+    res = llm.invoke(messages)
+    DashboardGenState["html_code"] = eval(res.content)
+    return DashboardGenState
+
+builder = StateGraph(DashboardGenState)
+builder.add_node("Relevant Graph Name Generator", relevant_graph_name_gen)
+builder.add_node("Relevant Graph Generator", relevant_graph_gen)
+builder.add_node("Dashboard HTML Generator", dashboard_html_gen)
+
+builder.add_edge(START, "Relevant Graph Name Generator")
+builder.add_edge("Relevant Graph Name Generator", "Relevant Graph Generator")
+builder.add_edge("Relevant Graph Generator", "Dashboard HTML Generator")
+builder.add_edge("Dashboard HTML Generator", END)
+g_dashboard = builder.compile()
+g_dashboard.get_graph().print_ascii()
 
 # -------------------- Multiple Graphs --------------------
 def generate_list_graph(list_obj, query, conn_str, schema):

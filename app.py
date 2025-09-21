@@ -5,8 +5,9 @@ import base64
 import io
 import tempfile
 import json
-from agents import g, summary_gen, kpi_gen, generate_list_graph, generate_schema_dict
+from agents import g, summary_gen, kpi_gen, generate_list_graph, generate_schema_dict, g_dashboard
 from PIL import Image
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Zingle DataBot", page_icon="🤖", layout="wide")
 
@@ -35,7 +36,7 @@ if uploaded_db:
     st.sidebar.success("Database uploaded and schema loaded!")
 
 # Tabs: Chat, Schema, KPI
-tab1, tab2, tab3 = st.tabs(["💬 Ask Questions", "📚 Schema Summary", "📊 KPIs"])
+tab1, tab2, tab3, tab4 = st.tabs(["💬 Ask Questions", "📚 Schema Summary", "📊 KPIs", "Dashboard"])
 
 # -------------------- Chat --------------------
 with tab1:
@@ -119,5 +120,32 @@ with tab3:
                 graph_bytes = base64.b64decode(item["graph_data"])
                 st.image(graph_bytes, caption=item["graph_caption"][0])
                 st.markdown(f"**Analysis:** {item['graph_caption'][1]}")
+        else:
+            st.warning("Please upload a database first.")
+
+with tab4:
+    st.header("Dashboard")
+    if st.button("Suggest Dashboard"):
+        if "schema" in st.session_state and "conn_str" in st.session_state:
+            with st.spinner("Generating HTML dashboard..."):
+                # Use session_state for schema and conn_str
+                res = g_dashboard.invoke({
+                    "schema": st.session_state["schema"],
+                    "conn_str": st.session_state["conn_str"]  # pass from session_state
+                })
+
+                page_template = res["html_code"][0]
+                graph_card_template = res["html_code"][1]
+
+                cards_html = ""
+                for graph_ in res["relevant_graphs"]:
+                    cards_html += graph_card_template.format(
+                        data=graph_["graph_data"],
+                        caption=graph_["graph_caption"][0],
+                        analysis=graph_["graph_caption"][1]
+                    )
+
+                final_html = page_template.format(cards=cards_html)
+                components.html(final_html, height=900, scrolling=True)
         else:
             st.warning("Please upload a database first.")
