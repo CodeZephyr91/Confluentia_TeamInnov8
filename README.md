@@ -14,30 +14,31 @@ A [Streamlit](https://streamlit.io/) web app for *AI Copilot for data teams*.
 ## ⚙ Setup
 
 ### 1. Clone the repository
-'''bash
+
+```bash
 git clone https://github.com/yourusername/your-repo.git
 cd Ai-copilot
-'''
+```
 
 ### 2. Creating Virtual environment(optional)
-'''bash
+```bash
 python -m venv venv
 source venv/bin/activate     # On Linux/Mac
 
 venv\Scripts\activate        # On Windows
-'''
+```
 
 ### 3. Installing dependencies
-'''bash
+```bash
 pip install -r requirements.txt
-'''
+```
 
 ### 4. Configuring .env file
-'''bash
+```bash
 GROQ_API_KEY=your_api_key_here
-'''
+```
 
 ### 5. Running the App
-'''bash
+```bash
 streamlit run app.py
-'''
+```
