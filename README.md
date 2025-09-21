@@ -54,7 +54,7 @@ streamlit run app.py
 ```
 This will launch the web app in your default browser. You can now interact with the AI Copilot interface directly.
 
-⚡ Features of AI Copilot for Data Teams
+## ⚡ Features of AI Copilot for Data Teams
 
 - **Natural Language to SQL** – Convert questions into precise SQL queries automatically.
 
